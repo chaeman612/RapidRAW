@@ -24,16 +24,24 @@ const handlers: Record<string, Handler> = {
       adjustmentsByteLength: core.adjustmentsByteLength(),
     };
   },
-  async decode(bytes: Uint8Array, name: string, settingsJson: string) {
+  async decode(bytes: Uint8Array, name: string, settingsJson: string, maxDim = 0) {
     let image: core.WebImage;
     try {
-      image = core.decodeImage(bytes, name, settingsJson);
+      image = core.decodeImage(bytes, name, settingsJson, maxDim);
     } catch (error) {
       // Formats the Rust decoders do not handle (e.g. HEIC from iPhones on Safari)
-      // are decoded by the browser and handed over losslessly as PNG.
-      const png = await browserTranscode(bytes, 'image/png');
-      if (!png) throw error;
-      image = core.decodeImage(png, name.replace(/\.[^.]+$/, '') + '.png', settingsJson);
+      // are decoded by the browser, reduced to the working size right away, and
+      // handed over as RGBA pixels.
+      const decoded = await browserDecode(bytes, maxDim);
+      if (!decoded) throw error;
+      image = core.decodeRgba(
+        bytes,
+        decoded.rgba,
+        decoded.width,
+        decoded.height,
+        decoded.logicalWidth,
+        decoded.logicalHeight,
+      );
     }
     const handle = nextHandle++;
     images.set(handle, image);
@@ -41,6 +49,8 @@ const handlers: Record<string, Handler> = {
       handle,
       width: image.width,
       height: image.height,
+      pixelWidth: image.pixelWidth,
+      pixelHeight: image.pixelHeight,
       isRaw: image.isRaw,
       exif: JSON.parse(image.exifJson()),
       asShotWhiteBalance: JSON.parse(image.asShotWhiteBalanceJson()),
@@ -92,6 +102,33 @@ async function browserTranscode(bytes: Uint8Array, type: string, maxDim?: number
     bitmap.close();
     const blob = await canvas.convertToBlob({ type, quality: 0.85 });
     return new Uint8Array(await blob.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+async function browserDecode(bytes: Uint8Array, maxDim: number) {
+  try {
+    const bitmap = await createImageBitmap(new Blob([bytes as Uint8Array<ArrayBuffer>]));
+    const logicalWidth = bitmap.width;
+    const logicalHeight = bitmap.height;
+    const scale = maxDim ? Math.min(1, maxDim / Math.max(logicalWidth, logicalHeight)) : 1;
+    const width = Math.max(1, Math.round(logicalWidth * scale));
+    const height = Math.max(1, Math.round(logicalHeight * scale));
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+    const data = ctx.getImageData(0, 0, width, height).data;
+    return {
+      rgba: new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
+      width,
+      height,
+      logicalWidth,
+      logicalHeight,
+    };
   } catch {
     return null;
   }

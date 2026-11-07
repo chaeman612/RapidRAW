@@ -5,6 +5,7 @@
 import { editorCore, type DecodedImage } from '../core/client';
 import { Renderer, frameCropRect, type Frame, type PackedAdjustments, type SourceImage } from '../gpu/renderer';
 import * as vfs from './vfs';
+import { isMobileUi } from '../platform';
 import { loadSidecar } from './sidecars';
 import { currentSettings, settingsJson } from './settings';
 import * as db from './db';
@@ -128,7 +129,7 @@ async function sourceFor(t: RenderTarget, width: number, height: number) {
     if (!t.isCurrent()) throw new Error('Superseded or worker failed');
     src = renderer.createSource(halves, width, height);
     // keep at most two scales (preview + one other)
-    if (t.sources.size >= 2) {
+    if (t.sources.size >= (isMobileUi ? 1 : 2)) {
       const [oldKey, old] = t.sources.entries().next().value as [string, SourceImage];
       t.sources.delete(oldKey);
       renderer.releaseSource(old);
@@ -158,9 +159,20 @@ export async function renderTarget(t: RenderTarget, adjustments: any, opts: Rend
   const fullFrame = frameFromAdjustments(adj, { uncropped: opts.uncropped });
   const [, , cropW, cropH] = frameCropRect(fullFrame, t.image.width, t.image.height);
   const gpuLimit = renderer.maxTextureDimension;
-  const scale = Math.min(1, opts.maxDim / Math.max(cropW, cropH), gpuLimit / Math.max(t.image.width, t.image.height));
-  const srcW = Math.max(1, Math.round(t.image.width * scale));
-  const srcH = Math.max(1, Math.round(t.image.height * scale));
+  // Never ask for more pixels than are kept in memory (reduced on phones).
+  const pixelScale = t.image.pixelWidth / t.image.width;
+  const scale = Math.min(
+    1,
+    pixelScale,
+    opts.maxDim / Math.max(cropW, cropH),
+    gpuLimit / Math.max(t.image.width, t.image.height),
+  );
+  let srcW = Math.max(1, Math.min(t.image.pixelWidth, Math.round(t.image.width * scale)));
+  let srcH = Math.max(1, Math.min(t.image.pixelHeight, Math.round(t.image.height * scale)));
+  if (Math.abs(srcW - t.image.pixelWidth) <= 1 && Math.abs(srcH - t.image.pixelHeight) <= 1) {
+    srcW = t.image.pixelWidth;
+    srcH = t.image.pixelHeight;
+  }
   const source = await sourceFor(t, srcW, srcH);
   const frame = scaleFrame(fullFrame, srcW / t.image.width);
   const [cx, cy, outW, outH] = frameCropRect(frame, srcW, srcH);

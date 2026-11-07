@@ -7,6 +7,7 @@ import { encodePixels, getRenderer, renderTarget, sessionTargetFor, type RenderT
 import { coreDefaults, settingsJson } from './settings';
 import { isEdited, loadSidecar, parseVirtualPath } from './sidecars';
 import * as vfs from './vfs';
+import { isMobileUi } from '../platform';
 
 // ---- file types -----------------------------------------------------------------
 
@@ -223,6 +224,15 @@ export async function generateThumbnail(path: string, force = false) {
 let libraryImage: { source: string; image: DecodedImage; sources: Map<string, SourceImage> } | null = null;
 let libraryLock: Promise<any> = Promise.resolve();
 
+async function releaseLibraryImage() {
+  if (!libraryImage) return;
+  const li = libraryImage;
+  libraryImage = null;
+  const renderer = await getRenderer();
+  li.sources.forEach((s) => renderer.releaseSource(s));
+  await libraryCore.release(li.image.handle);
+}
+
 /** Decodes `path` in the library worker (one image kept at a time) and renders it. */
 export function renderPath(path: string, adjustments: any, maxDim: number) {
   const current = sessionTargetFor(path);
@@ -230,12 +240,7 @@ export function renderPath(path: string, adjustments: any, maxDim: number) {
   const run = libraryLock.then(async () => {
     const { source } = parseVirtualPath(path);
     if (libraryImage?.source !== source) {
-      if (libraryImage) {
-        const renderer = await getRenderer();
-        libraryImage.sources.forEach((s) => renderer.releaseSource(s));
-        await libraryCore.release(libraryImage.image.handle);
-        libraryImage = null;
-      }
+      await releaseLibraryImage();
       const file = await vfs.readFile(source);
       const image = await libraryCore.decode(
         new Uint8Array(await file.arrayBuffer()),
@@ -252,7 +257,12 @@ export function renderPath(path: string, adjustments: any, maxDim: number) {
       sources: li.sources,
       isCurrent: () => libraryImage === li,
     };
-    return renderTarget(target, adjustments, { maxDim });
+    try {
+      return await renderTarget(target, adjustments, { maxDim });
+    } finally {
+      // Phones: free the decoded image right away instead of caching it.
+      if (isMobileUi) await releaseLibraryImage();
+    }
   });
   libraryLock = run.catch(() => {});
   return run;

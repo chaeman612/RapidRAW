@@ -11,14 +11,14 @@ image pipeline as the desktop app.
 
 ## How it works
 
-| Layer | Desktop app | Web build |
-| --- | --- | --- |
-| UI | `src/` (React) | **same code**, unchanged except one responsive header fix |
-| Tauri APIs (`invoke`, events, dialogs, window) | Tauri | `web/src/shims/*` (Vite aliases) |
-| Commands (`load_image`, `apply_adjustments`, …) | `src-tauri/src` | `web/src/backend/*` |
-| RAW decoding, adjustment → GPU uniform packing, masks, histogram, auto adjust | Rust | **same Rust code** compiled to WebAssembly (`web/core`) |
-| Rendering | wgpu + `src-tauri/src/shaders/*.wgsl` | WebGPU + **the same WGSL files** (`web/src/gpu/renderer.ts`) |
-| Files | file system | File System Access API (desktop Chromium) / OPFS library (phones) |
+| Layer                                                                         | Desktop app                           | Web build                                                         |
+| ----------------------------------------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------- |
+| UI                                                                            | `src/` (React)                        | **same code**, unchanged except one responsive header fix         |
+| Tauri APIs (`invoke`, events, dialogs, window)                                | Tauri                                 | `web/src/shims/*` (Vite aliases)                                  |
+| Commands (`load_image`, `apply_adjustments`, …)                               | `src-tauri/src`                       | `web/src/backend/*`                                               |
+| RAW decoding, adjustment → GPU uniform packing, masks, histogram, auto adjust | Rust                                  | **same Rust code** compiled to WebAssembly (`web/core`)           |
+| Rendering                                                                     | wgpu + `src-tauri/src/shaders/*.wgsl` | WebGPU + **the same WGSL files** (`web/src/gpu/renderer.ts`)      |
+| Files                                                                         | file system                           | File System Access API (desktop Chromium) / OPFS library (phones) |
 
 `web/core` reuses the desktop sources in two ways:
 
@@ -49,7 +49,7 @@ The web build switches to RapidRAW's touch layout (the one used by the Android a
    into the browser's private storage (OPFS) and stay there between visits.
 2. Double-tap a photo to edit.
 3. After **Export**, use **Save / Share** to save the result to your gallery.
-4. *Add to Home Screen* installs it like an app (PWA, works offline after the first load).
+4. _Add to Home Screen_ installs it like an app (PWA, works offline after the first load).
 
 Force a layout with `?ui=mobile` or `?ui=desktop` (`?ui=auto` resets).
 
@@ -101,7 +101,12 @@ Notes:
 
 - RAW development runs single-threaded in WebAssembly (≈6 s for a 12 MP NEF on a
   laptop CPU); it happens in a Web Worker so the UI stays responsive.
-- Very large RAW files (40 MP+) may exceed the memory browsers give a tab on phones.
+- Phones keep images at most 4096 px on the long edge in memory (iOS Safari
+  reloads a tab above roughly 1.5 GB and limits canvases to ~16.7 MP). Crop and
+  mask coordinates still refer to the full-size photo, so sidecars stay
+  compatible with desktop; exports from a phone are at most 4096 px.
+- Very large RAW files (e.g. 48 MP ProRAW DNG) are developed at full size before
+  being reduced and may still exceed a phone browser's memory; HEIC/JPEG work best.
 - Full-resolution export is limited to the GPU's maximum texture size
   (usually 8192 or 16384 px), like the desktop app.
 

@@ -1,11 +1,24 @@
 /** Promise-based RPC to the WASM core workers. */
 import CoreWorker from './worker.ts?worker';
 import type { PackedAdjustments } from '../gpu/renderer';
+import { isMobileUi } from '../platform';
+
+/**
+ * Phones give a browser tab far less memory than desktops (iOS Safari reloads
+ * the page above roughly 1.5 GB). There, images are kept at most this large on
+ * the long edge; crop/mask coordinates still use the full size, so sidecars
+ * stay compatible with the desktop app. 0 = no limit.
+ */
+export const MOBILE_MAX_DIM = isMobileUi ? 4096 : 0;
 
 export interface DecodedImage {
   handle: number;
+  /** Real (logical) size; all adjustment coordinates refer to it. */
   width: number;
   height: number;
+  /** Size of the pixels kept in memory (smaller on phones, see MOBILE_MAX_DIM). */
+  pixelWidth: number;
+  pixelHeight: number;
   isRaw: boolean;
   exif: Record<string, string>;
   asShotWhiteBalance: { temperature: number; tint: number } | null;
@@ -55,7 +68,7 @@ class CoreClient {
     return this.call<CoreDefaults>('defaults');
   }
   decode(bytes: Uint8Array, name: string, settingsJson: string) {
-    return this.call<DecodedImage>('decode', [bytes, name, settingsJson], [bytes.buffer]);
+    return this.call<DecodedImage>('decode', [bytes, name, settingsJson, MOBILE_MAX_DIM], [bytes.buffer]);
   }
   release(handle: number) {
     return this.call<void>('release', [handle]);
@@ -90,5 +103,8 @@ class CoreClient {
 
 /** Editing session: decode of the open image, uniforms, masks, analytics. */
 export const editorCore = new CoreClient('rapidraw-editor');
-/** Library: thumbnails and full decodes for batch jobs (export, edited thumbnails). */
-export const libraryCore = new CoreClient('rapidraw-library');
+/**
+ * Library: thumbnails and full decodes for batch jobs (export, edited thumbnails).
+ * Phones share the editor's worker so only one WebAssembly heap exists.
+ */
+export const libraryCore = isMobileUi ? editorCore : new CoreClient('rapidraw-library');

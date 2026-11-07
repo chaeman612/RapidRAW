@@ -45,9 +45,14 @@ fn render_options(settings: &AppSettings, is_raw: bool) -> RenderOptions {
 
 /// A decoded source image kept in WebAssembly memory (linear-light RGB f32 for
 /// RAW files, display-referred RGB f32 for everything else, as on desktop).
+///
+/// `logical` is the image's real (oriented) size; all coordinates in adjustments
+/// (crop, masks) refer to it, exactly as on desktop. `image` may be stored at a
+/// reduced working resolution to fit mobile memory limits.
 #[wasm_bindgen]
 pub struct WebImage {
     image: DynamicImage,
+    logical: (u32, u32),
     is_raw: bool,
     as_shot: AsShot,
     exif: HashMap<String, String>,
@@ -61,11 +66,22 @@ pub struct WebImage {
 impl WebImage {
     #[wasm_bindgen(getter)]
     pub fn width(&self) -> u32 {
-        self.image.width()
+        self.logical.0
     }
 
     #[wasm_bindgen(getter)]
     pub fn height(&self) -> u32 {
+        self.logical.1
+    }
+
+    /// Width of the stored pixels (smaller than `width` when decoded with a cap).
+    #[wasm_bindgen(getter, js_name = pixelWidth)]
+    pub fn pixel_width(&self) -> u32 {
+        self.image.width()
+    }
+
+    #[wasm_bindgen(getter, js_name = pixelHeight)]
+    pub fn pixel_height(&self) -> u32 {
         self.image.height()
     }
 
@@ -84,8 +100,8 @@ impl WebImage {
         serde_json::to_string(&self.as_shot.white_balance).unwrap_or_else(|_| "null".into())
     }
 
-    /// Returns RGBA16F texels (as raw f16 bits) of the image resized to exactly
-    /// `width` x `height` (pass the full size for no resampling).
+    /// Returns RGBA16F texels (as raw f16 bits) of the stored image resized to
+    /// exactly `width` x `height` (pass the pixel size for no resampling).
     #[wasm_bindgen(js_name = rgbaHalves)]
     pub fn rgba_halves(&mut self, width: u32, height: u32) -> Vec<u16> {
         let full = (width, height) == self.image.dimensions();
@@ -98,6 +114,8 @@ impl WebImage {
                 .as_ref()
                 .is_none_or(|s| s.dimensions() != (width, height));
             if needs {
+                // Release the previous scaled copy first so peak memory stays low.
+                self.scaled = None;
                 self.scaled = Some(resize_f32(&self.image, width, height));
             }
             self.scaled.as_ref().unwrap()
@@ -135,15 +153,23 @@ impl WebImage {
             self.mask_reference = Some(reference);
         }
         let reference = self.mask_reference.as_ref();
+        let reference_ratio = self.image.width() as f32 / self.logical.0.max(1) as f32;
         let mut out = Vec::new();
         for def in definitions
             .iter()
             .filter(|m| m.visible && !m.sub_masks.is_empty())
             .take(MAX_MASKS)
         {
-            let bitmap =
-                generate_mask_bitmap(def, width, height, scale, (crop_x, crop_y), reference)
-                    .unwrap_or_else(|| image::GrayImage::new(width, height));
+            let bitmap = generate_mask_bitmap(
+                def,
+                width,
+                height,
+                scale,
+                (crop_x, crop_y),
+                reference,
+                reference_ratio,
+            )
+            .unwrap_or_else(|| image::GrayImage::new(width, height));
             out.extend_from_slice(bitmap.as_raw());
         }
         Ok(out)
@@ -330,17 +356,21 @@ pub fn supported_file_types() -> Result<JsValue, JsError> {
 }
 
 /// Decodes a RAW or regular image file, matching desktop `load_base_image_from_bytes`.
+///
+/// `max_dim` > 0 caps the stored working resolution (long edge) while keeping
+/// the logical size; used on phones, whose browsers allow far less memory.
 #[wasm_bindgen(js_name = decodeImage)]
 pub fn decode_image(
     bytes: &[u8],
     file_name: &str,
     settings_json: &str,
+    max_dim: u32,
 ) -> Result<WebImage, JsError> {
     let settings = parse_settings(settings_json);
     let is_raw = crate::formats::is_raw_file(file_name);
     let exif = crate::exif_processing::extract_metadata(bytes).unwrap_or_default();
 
-    let image = if is_raw {
+    let (image, logical) = if is_raw {
         let developed = std::panic::catch_unwind(|| {
             crate::raw_processing::develop_raw_image(
                 bytes,
@@ -360,13 +390,21 @@ pub fn decode_image(
                 if color_nr > 0.0 || sharpening > 0.0 {
                     remove_raw_artifacts_and_enhance(&mut image, color_nr, sharpening);
                 }
-                image
+                let logical = image.dimensions();
+                match capped_size(logical, max_dim) {
+                    Some((w, h)) => {
+                        let reduced = resize_f32(&image, w, h);
+                        drop(image);
+                        (reduced, logical)
+                    }
+                    None => (image, logical),
+                }
             }
             Ok(Err(e)) => return Err(err(format!("Failed to develop RAW file: {e}"))),
             Err(_) => return Err(err("The RAW decoder crashed while reading this file.")),
         }
     } else {
-        load_image_with_orientation(bytes).map_err(err)?
+        load_image_with_orientation(bytes, max_dim).map_err(err)?
     };
 
     let as_shot = if is_raw {
@@ -377,8 +415,37 @@ pub fn decode_image(
 
     Ok(WebImage {
         image,
+        logical,
         is_raw,
         as_shot,
+        exif,
+        scaled: None,
+        mask_reference: None,
+    })
+}
+
+/// Builds an image from RGBA8 pixels the browser decoded (formats the Rust
+/// decoders lack, e.g. HEIC from iPhones in Safari). `rgba` may already be
+/// reduced to a working size; `logical_*` is the photo's real size. `source`
+/// is the original file, used for EXIF.
+#[wasm_bindgen(js_name = decodeRgba)]
+pub fn decode_rgba(
+    source: &[u8],
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+    logical_width: u32,
+    logical_height: u32,
+) -> Result<WebImage, JsError> {
+    let exif = crate::exif_processing::extract_metadata(source).unwrap_or_default();
+    let buffer = image::RgbaImage::from_raw(width, height, rgba)
+        .ok_or_else(|| err("Decoded pixel buffer does not match its size"))?;
+    let image = DynamicImage::ImageRgb32F(DynamicImage::ImageRgba8(buffer).to_rgb32f());
+    Ok(WebImage {
+        image,
+        logical: (logical_width.max(1), logical_height.max(1)),
+        is_raw: false,
+        as_shot: AsShot::reference(),
         exif,
         scaled: None,
         mask_reference: None,
@@ -450,23 +517,91 @@ fn exif_orientation(bytes: &[u8]) -> Orientation {
         .unwrap_or(Orientation::Normal)
 }
 
-/// Same as desktop `image_loader::load_image_with_orientation`.
-fn load_image_with_orientation(bytes: &[u8]) -> anyhow::Result<DynamicImage> {
+/// Same as desktop `image_loader::load_image_with_orientation`, plus an optional
+/// working-resolution cap applied before the (4x larger) f32 conversion.
+fn load_image_with_orientation(
+    bytes: &[u8],
+    max_dim: u32,
+) -> anyhow::Result<(DynamicImage, (u32, u32))> {
     let mut reader = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?;
     reader.no_limits();
     let image = reader.decode()?;
     let oriented = apply_orientation(image, exif_orientation(bytes));
-    Ok(DynamicImage::ImageRgb32F(oriented.to_rgb32f()))
+    let logical = oriented.dimensions();
+    let working = match capped_size(logical, max_dim) {
+        Some((w, h)) => oriented.thumbnail_exact(w, h),
+        None => oriented,
+    };
+    Ok((DynamicImage::ImageRgb32F(working.to_rgb32f()), logical))
 }
 
+/// Size that fits `max_dim` on the long edge, or None when no reduction is needed.
+fn capped_size((w, h): (u32, u32), max_dim: u32) -> Option<(u32, u32)> {
+    if max_dim == 0 || w.max(h) <= max_dim {
+        return None;
+    }
+    let s = max_dim as f64 / w.max(h) as f64;
+    Some((
+        ((w as f64 * s).round() as u32).max(1),
+        ((h as f64 * s).round() as u32).max(1),
+    ))
+}
+
+/// Area-average downscale straight from the stored f32 pixels into a buffer of
+/// exactly `width` x `height` (no full-size temporary copies, which matter for
+/// memory on phones). Falls back to Catmull-Rom for upscaling.
 fn resize_f32(image: &DynamicImage, width: u32, height: u32) -> DynamicImage {
-    let src = image.to_rgb32f();
-    let filter = if width < image.width() / 2 {
-        imageops::FilterType::Triangle
-    } else {
-        imageops::FilterType::CatmullRom
+    let owned;
+    let src: &image::Rgb32FImage = match image {
+        DynamicImage::ImageRgb32F(buffer) => buffer,
+        other => {
+            owned = other.to_rgb32f();
+            &owned
+        }
     };
-    DynamicImage::ImageRgb32F(imageops::resize(&src, width, height, filter))
+    let (sw, sh) = src.dimensions();
+    if width > sw || height > sh {
+        return DynamicImage::ImageRgb32F(imageops::resize(
+            src,
+            width,
+            height,
+            imageops::FilterType::CatmullRom,
+        ));
+    }
+    let raw = src.as_raw();
+    let fx = sw as f64 / width as f64;
+    let fy = sh as f64 / height as f64;
+    let mut out = vec![0f32; width as usize * height as usize * 3];
+    let mut acc = vec![0f64; width as usize * 3];
+    for y in 0..height as usize {
+        let y0 = (y as f64 * fy) as usize;
+        let y1 = (((y + 1) as f64 * fy) as usize).clamp(y0 + 1, sh as usize);
+        acc.iter_mut().for_each(|v| *v = 0.0);
+        for sy in y0..y1 {
+            let row = &raw[sy * sw as usize * 3..(sy + 1) * sw as usize * 3];
+            for x in 0..width as usize {
+                let x0 = (x as f64 * fx) as usize;
+                let x1 = (((x + 1) as f64 * fx) as usize).clamp(x0 + 1, sw as usize);
+                let (mut r, mut g, mut b) = (0f64, 0f64, 0f64);
+                for px in row[x0 * 3..x1 * 3].chunks_exact(3) {
+                    r += px[0] as f64;
+                    g += px[1] as f64;
+                    b += px[2] as f64;
+                }
+                acc[x * 3] += r / (x1 - x0) as f64;
+                acc[x * 3 + 1] += g / (x1 - x0) as f64;
+                acc[x * 3 + 2] += b / (x1 - x0) as f64;
+            }
+        }
+        let n = (y1 - y0) as f64;
+        let dst = &mut out[y * width as usize * 3..(y + 1) * width as usize * 3];
+        for (d, a) in dst.iter_mut().zip(acc.iter()) {
+            *d = (*a / n) as f32;
+        }
+    }
+    DynamicImage::ImageRgb32F(
+        image::Rgb32FImage::from_raw(width, height, out).expect("buffer size matches"),
+    )
 }
 
 /// Same as desktop `gpu_compute::rgba_halves` (alpha = 1).

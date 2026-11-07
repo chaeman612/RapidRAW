@@ -5,6 +5,20 @@
 // use RapidRAW's own generators unchanged. AI-based masks need ONNX models that the
 // web build does not ship yet, so they are skipped.
 
+/// `reference_ratio` is the size of `warped_image` relative to the logical image
+/// (below 1 when the web build keeps a reduced working copy on phones). Color and
+/// luminance masks sample that image, so their target point and scale are mapped
+/// into its pixel space; the output mask is unchanged.
+fn reference_params(params: &Value, ratio: f32) -> Value {
+    let mut p = params.clone();
+    for key in ["targetX", "targetY"] {
+        if let Some(v) = p.get(key).and_then(Value::as_f64) {
+            p[key] = serde_json::json!(v * ratio as f64);
+        }
+    }
+    p
+}
+
 fn web_sub_mask_bitmap(
     sub_mask: &SubMask,
     width: u32,
@@ -12,10 +26,16 @@ fn web_sub_mask_bitmap(
     scale: f32,
     crop_offset: (f32, f32),
     warped_image: Option<&DynamicImage>,
+    reference_ratio: f32,
 ) -> Option<GrayImage> {
     if !sub_mask.visible {
         return None;
     }
+    let ratio = if reference_ratio > 0.0 {
+        reference_ratio
+    } else {
+        1.0
+    };
     match sub_mask.mask_type.as_str() {
         "radial" => Some(generate_radial_bitmap(
             &sub_mask.parameters,
@@ -46,18 +66,18 @@ fn web_sub_mask_bitmap(
             crop_offset,
         )),
         "color" => generate_color_bitmap(
-            &sub_mask.parameters,
+            &reference_params(&sub_mask.parameters, ratio),
             width,
             height,
-            scale,
+            scale / ratio,
             crop_offset,
             warped_image,
         ),
         "luminance" => generate_luminance_bitmap(
-            &sub_mask.parameters,
+            &reference_params(&sub_mask.parameters, ratio),
             width,
             height,
-            scale,
+            scale / ratio,
             crop_offset,
             warped_image,
         ),
@@ -73,6 +93,7 @@ pub fn generate_mask_bitmap(
     scale: f32,
     crop_offset: (f32, f32),
     warped_image: Option<&DynamicImage>,
+    reference_ratio: f32,
 ) -> Option<GrayImage> {
     if !mask_def.visible || mask_def.sub_masks.is_empty() {
         return None;
@@ -81,9 +102,15 @@ pub fn generate_mask_bitmap(
     let mut final_mask = GrayImage::new(width, height);
 
     for sub_mask in &mask_def.sub_masks {
-        if let Some(mut sub_bitmap) =
-            web_sub_mask_bitmap(sub_mask, width, height, scale, crop_offset, warped_image)
-        {
+        if let Some(mut sub_bitmap) = web_sub_mask_bitmap(
+            sub_mask,
+            width,
+            height,
+            scale,
+            crop_offset,
+            warped_image,
+            reference_ratio,
+        ) {
             let invert = sub_mask.invert;
             let opacity_multiplier = (sub_mask.opacity / 100.0).clamp(0.0, 1.0);
             let mode = sub_mask.mode;

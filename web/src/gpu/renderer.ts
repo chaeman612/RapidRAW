@@ -10,6 +10,7 @@ import flareWgsl from '../../../src-tauri/src/shaders/flare.wgsl?raw';
 import guidedWgsl from '../../../src-tauri/src/shaders/guided.wgsl?raw';
 import mainWgsl from '../../../src-tauri/src/shaders/shader.wgsl?raw';
 import transformWgsl from '../../../src-tauri/src/shaders/transform.wgsl?raw';
+import { isMobileUi } from '../platform';
 
 // ---- constants mirrored from gpu_processing.rs --------------------------------
 const BLUR_H_GROUP_WIDTH = 256;
@@ -32,6 +33,8 @@ const TILE_SIZE = 2048;
 const TILE_OVERLAP = 128;
 const MAX_MASKS = 32;
 const FRAME_ROTATE = 1;
+/** Reframed + guided-filter inputs kept per renderer (fewer on phones). */
+const MAX_PREPARED = isMobileUi ? 1 : 3;
 
 const TB = GPUTextureUsage.TEXTURE_BINDING;
 const SB = GPUTextureUsage.STORAGE_BINDING;
@@ -364,7 +367,7 @@ export class Renderer {
     const guided = this.buildGuidedCoeffs(view, width, height, isRaw, owned);
     const entry: PreparedInput = { key, width, height, texture, view, ...guided, owned };
     this.prepared.push(entry);
-    while (this.prepared.length > 3) {
+    while (this.prepared.length > MAX_PREPARED) {
       this.prepared.shift()!.owned.forEach((t) => t.destroy());
     }
     return entry;
@@ -447,9 +450,13 @@ export class Renderer {
     const hcw = Math.max(1, Math.ceil(hw / GF_COARSE_DIV));
     const hch = Math.max(1, Math.ceil(hh / GF_COARSE_DIV));
 
+    // Scratch textures are freed as soon as the passes are submitted; only the
+    // four outputs bound by the main shader stay alive (matters on phones).
+    const scratch: GPUTexture[] = [];
+    const keep = new Set(['GF Coeffs', 'GF Coarse Moments', 'Haze Coeffs', 'Haze Airlight']);
     const make = (label: string, w: number, h: number) => {
       const t = this.device.createTexture({ label, size: [w, h], format: 'rgba32float', usage: TB | SB });
-      owned.push(t);
+      (keep.has(label) ? owned : scratch).push(t);
       return t.createView();
     };
     const params = (baseRadius: number, eps: number, div: number) => {
@@ -541,6 +548,7 @@ export class Renderer {
     pass('gf_blur_h', hzB, hzB, hzA, pHzGf, half);
     pass('gf_blur_v', hzA, hzA, haze, pHzGf, half);
     this.device.queue.submit([enc.finish()]);
+    scratch.forEach((t) => t.destroy());
 
     return { gfCoeffs: ab, gfStructure: cMoments, haze, airlight };
   }

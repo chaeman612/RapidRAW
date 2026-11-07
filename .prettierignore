@@ -4,3 +4,7 @@ src-tauri/target
 src-tauri/gen
 src-tauri/rawler
 data
+web/core/pkg
+web/core/.vendor
+web/core/src/upstream
+web/dist

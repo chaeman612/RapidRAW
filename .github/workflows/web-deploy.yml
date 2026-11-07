@@ -1,0 +1,82 @@
+name: Deploy RapidRAW Web
+
+# Builds the browser version (web/) and publishes it to GitHub Pages.
+# One-time setup: repository Settings -> Pages -> Source: "GitHub Actions".
+
+on:
+  push:
+    branches:
+      - main
+      - web-version
+    paths:
+      - 'web/**'
+      - 'src/**'
+      - 'src-tauri/src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/web-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: rapidraw-web-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read toolchain versions
+        id: versions
+        run: |
+          echo "rust=$(sed -n 's/^channel = \"\(.*\)\"/\1/p' src-tauri/rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+          echo "bindgen=$(grep -A1 '^name = "wasm-bindgen"$' web/core/Cargo.lock | sed -n 's/^version = "\(.*\)"/\1/p')" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.versions.outputs.rust }}
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: web/core
+          cache-directories: web/core/.vendor
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version ${{ steps.versions.outputs.bindgen }} --locked
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Build WebAssembly core
+        run: npm run web:core
+
+      - name: Build web app
+        run: npm run web:build
+        env:
+          RAPIDRAW_WEB_BASE: /${{ github.event.repository.name }}/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

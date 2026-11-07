@@ -22,6 +22,9 @@ module.exports = [
       'src-tauri/gen/**',
       'src-tauri/rawler/**',
       'data/**',
+      'web/dist/**',
+      'web/core/pkg/**',
+      'web/core/.vendor/**',
     ],
   },
   jsRecommendedForTs,
@@ -71,6 +74,13 @@ module.exports = [
           ],
         },
       ],
+    },
+  },
+  {
+    // RapidRAW Web backend: mirrors untyped Tauri IPC payloads.
+    files: ['web/src/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
     },
   },
 ];

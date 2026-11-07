@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en" class="overscroll-none">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="./icons/icon-256.png" />
+    <link rel="apple-touch-icon" href="./icons/icon-256.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#121212" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="RapidRAW" />
+    <meta
+      name="description"
+      content="RapidRAW Web: a non-destructive, GPU-accelerated RAW photo editor that runs entirely in your browser."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap"
+      rel="stylesheet"
+    />
+    <title>RapidRAW Web</title>
+    <style>
+      html,
+      body {
+        background: #121212;
+        margin: 0;
+      }
+      #rapidraw-web-boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: Poppins, system-ui, sans-serif;
+        color: #c8c8c8;
+        background: #121212;
+        text-align: center;
+        padding: 24px;
+      }
+      #rapidraw-web-boot h1 {
+        font-size: 20px;
+        font-weight: 600;
+        margin: 0 0 8px;
+        color: #fff;
+      }
+      #rapidraw-web-boot p {
+        font-size: 14px;
+        line-height: 1.6;
+        margin: 4px 0;
+        max-width: 520px;
+      }
+      html,
+      body {
+        overscroll-behavior: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="rapidraw-web-boot">
+      <div>
+        <h1>RapidRAW Web</h1>
+        <p>Loading…</p>
+      </div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -305,7 +305,9 @@ function App() {
 
   const getDynamicCompactPanelHeight = () => {
     const { originalSize, adjustments } = useEditorStore.getState();
-    const halfScreenHeight = viewportSize.height > 0 ? Math.round(viewportSize.height * 0.5) : 340;
+    // Phones give the photo more room: the panel shows one adjustment section at a time.
+    const panelShare = viewportSize.width > 0 && viewportSize.width < 640 ? 0.42 : 0.5;
+    const halfScreenHeight = viewportSize.height > 0 ? Math.round(viewportSize.height * panelShare) : 340;
 
     if (!selectedImage || originalSize.width === 0 || originalSize.height === 0 || viewportSize.width === 0) {
       return halfScreenHeight;

@@ -267,6 +267,7 @@ export function MobilePanelSwitcher({
     <div
       className={clsx(
         'flex items-center p-1.5 gap-1 shrink-0 custom-scrollbar',
+        !isVertical && 'justify-around',
         isVertical
           ? 'flex-col overflow-y-auto h-full border-l border-surface'
           : 'flex-row overflow-x-auto w-full border-t border-surface',
@@ -282,9 +283,11 @@ export function MobilePanelSwitcher({
             onClick={() => onPanelSelect(id)}
             className={clsx(
               'p-2 rounded-md shrink-0 transition-colors',
-              !isVertical && 'flex-1 flex justify-center',
+              !isVertical && 'flex-1 max-w-16 flex justify-center py-2.5 rounded-lg',
               isActive
-                ? 'bg-surface text-text-primary'
+                ? isVertical
+                  ? 'bg-surface text-text-primary'
+                  : 'bg-accent text-button-text'
                 : 'text-text-secondary hover:bg-surface hover:text-text-primary',
             )}
           >

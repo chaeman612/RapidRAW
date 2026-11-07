@@ -7,6 +7,7 @@ import Editor from '../panel/Editor';
 import BottomBar from '../panel/BottomBar';
 import Resizer from '../ui/Resizer';
 import { MobilePanelSwitcher } from '../panel/PanelSwitcher';
+import { usePhoneLayout } from '../../hooks/usePhoneLayout';
 
 import { useEditorStore } from '../../store/useEditorStore';
 import { useUIStore } from '../../store/useUIStore';
@@ -67,6 +68,7 @@ export default function EditorView({
   requestThumbnails,
   renderAppPanel,
 }: EditorViewProps) {
+  const isPhone = usePhoneLayout();
   const { selectedImage } = useEditorStore(
     useShallow((state) => ({
       selectedImage: state.selectedImage,
@@ -202,7 +204,9 @@ export default function EditorView({
           </AnimatePresence>
         </div>
         <MobilePanelSwitcher activePanel={activePanel} onPanelSelect={handlePanelSelect} />
-        <div className="shrink-0 border-t border-surface">{editorBottomBarComponent}</div>
+        {/* Phones: copy/paste live in the Adjust panel's category strip and rating in
+            the library, keeping the editor's bottom area to a single toolbar. */}
+        {!isPhone && <div className="shrink-0 border-t border-surface">{editorBottomBarComponent}</div>}
       </div>
     ) : null;
 

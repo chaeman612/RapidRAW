@@ -1,5 +1,19 @@
-import React, { useCallback, useMemo } from 'react';
-import { RotateCcw, Copy, ClipboardPaste, PencilSparkles, ChartArea, LayoutList } from 'lucide-react';
+import React, { useCallback, useMemo, useState } from 'react';
+import {
+  RotateCcw,
+  Copy,
+  ClipboardPaste,
+  PencilSparkles,
+  ChartArea,
+  LayoutList,
+  Sun,
+  Spline,
+  Palette,
+  Focus,
+  Sparkles,
+  Eye,
+  type LucideIcon,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
@@ -29,6 +43,48 @@ import { useSettingsStore } from '../../../store/useSettingsStore';
 import { useUIStore } from '../../../store/useUIStore';
 import { buildAutoAdjustModeOptions, useEditorActions } from '../../../hooks/useEditorActions';
 import { useWaveformControls } from '../../../hooks/useWaveformControls';
+import { usePhoneLayout } from '../../../hooks/usePhoneLayout';
+
+// Phone layout: one adjustment section at a time, picked from a category strip.
+const PHONE_SECTION_ICONS: Record<string, LucideIcon> = {
+  basic: Sun,
+  curves: Spline,
+  color: Palette,
+  details: Focus,
+  effects: Sparkles,
+};
+let lastPhoneSection = 'basic';
+
+function PhoneStripButton({
+  icon: Icon,
+  label,
+  onClick,
+  onContextMenu,
+  active = false,
+  disabled = false,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+  onContextMenu?: (event: React.MouseEvent) => void;
+  active?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      className={clsx(
+        'flex flex-col items-center justify-center gap-1 shrink-0 min-w-16 px-2 py-1.5 rounded-lg transition-colors disabled:opacity-40',
+        active ? 'bg-surface text-text-primary' : 'text-text-secondary active:bg-surface',
+      )}
+      disabled={disabled}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+    >
+      <Icon size={20} />
+      <span className="text-[11px] leading-none whitespace-nowrap">{label}</span>
+    </button>
+  );
+}
 
 function AdjustmentSectionContent(props: {
   sectionName: string;
@@ -45,7 +101,17 @@ export default function Controls() {
   const { showContextMenu } = useContextMenu();
   const { isResizingWaveform, onToggleWaveform, setActiveWaveformChannel, handleWaveformResize } =
     useWaveformControls();
-  const { setAdjustments, handleAutoAdjustments, handleLutSelect, setLutPreviewOverride } = useEditorActions();
+  const {
+    setAdjustments,
+    handleAutoAdjustments,
+    handleLutSelect,
+    setLutPreviewOverride,
+    handleCopyAdjustments,
+    handlePasteAdjustments,
+  } = useEditorActions();
+  const isPhone = usePhoneLayout();
+  const [phoneSection, setPhoneSection] = useState(lastPhoneSection);
+  const canPaste = useEditorStore((state) => state.copiedAdjustments !== null);
 
   const { appSettings, theme } = useSettingsStore(
     useShallow((state) => ({
@@ -233,6 +299,122 @@ export default function Controls() {
 
     showContextMenu(event.clientX, event.clientY, options);
   };
+
+  if (isPhone) {
+    const section = visibleSections.includes(phoneSection) ? phoneSection : visibleSections[0];
+    const selectSection = (name: string) => {
+      lastPhoneSection = name;
+      setPhoneSection(name);
+    };
+    const sectionLabel = (name: string) =>
+      t(`editor.adjustments.sections.${name}` as 'editor.adjustments.sections.basic');
+
+    return (
+      <div className="flex flex-col h-full">
+        <AnimatePresence initial={false}>
+          {isWaveformVisible && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: Math.min(waveformHeight || 256, 160), opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="shrink-0 flex flex-col relative border-b border-surface overflow-hidden"
+            >
+              <div className="grow w-full h-full p-2 min-h-0">
+                <ConnectedWaveform
+                  setDisplayMode={setActiveWaveformChannel}
+                  setAdjustments={setAdjustments}
+                  theme={theme}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="grow min-h-0 overflow-y-auto px-3 pt-3 pb-2">
+          {selectedImage && section ? (
+            <>
+              {!isToolActive(activeTools, section) && (
+                <button
+                  className="w-full mb-3 py-2 rounded-md bg-surface text-text-secondary text-sm flex items-center justify-center gap-2"
+                  onClick={() => handleToggleVisibility(section)}
+                >
+                  <Eye size={16} />
+                  {sectionLabel(section)}
+                </button>
+              )}
+              <AdjustmentSectionContent
+                sectionName={section}
+                activeTools={activeTools}
+                onToggleTool={handleToggleVisibility}
+                setAdjustments={setAdjustments}
+                theme={theme}
+                handleLutSelect={handleLutSelect}
+                onLutHover={setLutPreviewOverride}
+                appSettings={appSettings}
+                asShotWhiteBalance={selectedImage.asShotWhiteBalance}
+                isWbPickerActive={isWbPickerActive}
+                toggleWbPicker={toggleWbPicker}
+                onDragStateChange={onDragStateChange}
+              />
+            </>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <Text variant={TextVariants.heading} color={TextColors.secondary} weight={TextWeights.normal}>
+                {t('editor.ai.noImageSelected')}
+              </Text>
+            </div>
+          )}
+        </div>
+
+        <div className="shrink-0 flex items-center gap-1 px-2 py-1.5 overflow-x-auto custom-scrollbar border-t border-surface">
+          <PhoneStripButton
+            icon={PencilSparkles}
+            label={t('contextMenus.editor.autoAdjust')}
+            disabled={!selectedImage}
+            onClick={() => handleAutoAdjustments()}
+            onContextMenu={handleAutoAdjustContextMenu}
+          />
+          <div className="w-px h-8 bg-surface shrink-0 mx-1" />
+          {visibleSections.map((name: string) => (
+            <PhoneStripButton
+              key={name}
+              icon={PHONE_SECTION_ICONS[name] ?? Sun}
+              label={sectionLabel(name)}
+              active={name === section}
+              onClick={() => selectSection(name)}
+              onContextMenu={(e) => handleSectionContextMenu(e, name)}
+            />
+          ))}
+          <div className="w-px h-8 bg-surface shrink-0 mx-1" />
+          <PhoneStripButton
+            icon={Copy}
+            label={t('settings.controls.speedEdit.keys.copy')}
+            disabled={!selectedImage}
+            onClick={() => handleCopyAdjustments()}
+          />
+          <PhoneStripButton
+            icon={ClipboardPaste}
+            label={t('settings.controls.speedEdit.keys.paste')}
+            disabled={!selectedImage || !canPaste}
+            onClick={() => handlePasteAdjustments()}
+          />
+          <PhoneStripButton
+            icon={ChartArea}
+            label={t('ui.waveform.tooltips.histogram')}
+            active={isWaveformVisible}
+            onClick={onToggleWaveform}
+          />
+          <PhoneStripButton
+            icon={RotateCcw}
+            label={t('ui.slider.reset')}
+            disabled={!selectedImage}
+            onClick={handleResetAdjustments}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">

@@ -31,6 +31,9 @@ function webOverrides(s: Record<string, any>) {
     useWgpuRenderer: false,
     decorations: false,
     enableAiTagging: false,
+    // AI models are not available in the browser: the frontend's "AI-free" mode
+    // hides AI masks, AI denoise and the AI panel.
+    aiProvider: 'ai-free',
     useAppleRaw9: false,
   };
 }

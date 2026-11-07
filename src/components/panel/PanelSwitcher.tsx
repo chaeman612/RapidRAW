@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Panel, PanelRegion } from '../ui/AppProperties';
 import { SwitcherPlacement, useUIStore } from '../../store/useUIStore';
+import { useSettingsStore } from '../../store/useSettingsStore';
 
 export const PANEL_ICONS: Record<Panel, LucideIcon> = {
   [Panel.Metadata]: Info,
@@ -249,6 +250,7 @@ export function MobilePanelSwitcher({
   onPanelSelect: (id: Panel) => void;
   placement?: 'bottom' | 'right';
 }) {
+  const isAiFree = useSettingsStore((s) => s.appSettings?.aiProvider === 'ai-free');
   const MOBILE_PANELS = [
     Panel.Metadata,
     Panel.Adjustments,
@@ -257,15 +259,19 @@ export function MobilePanelSwitcher({
     Panel.Ai,
     Panel.Presets,
     Panel.Export,
-  ];
+  ].filter((id) => !(isAiFree && id === Panel.Ai));
 
   const isVertical = placement === 'right';
 
   return (
-    <div className={clsx(
-      'flex items-center p-1.5 gap-1 shrink-0 custom-scrollbar',
-      isVertical ? 'flex-col overflow-y-auto h-full border-l border-surface' : 'flex-row overflow-x-auto w-full border-t border-surface',
-    )}>
+    <div
+      className={clsx(
+        'flex items-center p-1.5 gap-1 shrink-0 custom-scrollbar',
+        isVertical
+          ? 'flex-col overflow-y-auto h-full border-l border-surface'
+          : 'flex-row overflow-x-auto w-full border-t border-surface',
+      )}
+    >
       {MOBILE_PANELS.map((id) => {
         const Icon = PANEL_ICONS[id];
         const isActive = activePanel === id;
@@ -276,6 +282,7 @@ export function MobilePanelSwitcher({
             onClick={() => onPanelSelect(id)}
             className={clsx(
               'p-2 rounded-md shrink-0 transition-colors',
+              !isVertical && 'flex-1 flex justify-center',
               isActive
                 ? 'bg-surface text-text-primary'
                 : 'text-text-secondary hover:bg-surface hover:text-text-primary',

@@ -1283,7 +1283,10 @@ export default function AIPanel() {
                     <Text variant={TextVariants.heading} className="mb-2">
                       {t('editor.ai.manualCleanupTitle')}
                     </Text>
-                    <div className="grid grid-cols-3 gap-2 mb-6" onClick={(e) => e.stopPropagation()}>
+                    <div
+                      className="grid grid-cols-3 max-sm:grid-cols-4 gap-2 max-sm:gap-1.5 mb-6"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {AI_DIRECT_PATCH_TYPES.map((maskType: MaskType) => (
                         <DraggableGridItem
                           key={maskType.type}
@@ -1297,7 +1300,10 @@ export default function AIPanel() {
                     <Text variant={TextVariants.heading} className="mb-2">
                       {t('editor.ai.touchUpTitle')}
                     </Text>
-                    <div className="grid grid-cols-3 gap-2 mb-6" onClick={(e) => e.stopPropagation()}>
+                    <div
+                      className="grid grid-cols-3 max-sm:grid-cols-4 gap-2 max-sm:gap-1.5 mb-6"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {AI_TOUCH_UP_TYPES.map((maskType: MaskType) => (
                         <DraggableGridItem
                           key={maskType.type}
@@ -1313,7 +1319,10 @@ export default function AIPanel() {
                         <Text variant={TextVariants.heading} className="mb-2">
                           {t('editor.ai.generativeEditTitle')}
                         </Text>
-                        <div className="grid grid-cols-3 gap-2" onClick={(e) => e.stopPropagation()}>
+                        <div
+                          className="grid grid-cols-3 max-sm:grid-cols-4 gap-2 max-sm:gap-1.5"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {AI_GENERATIVE_CREATION_TYPES.map((maskType: MaskType) => (
                             <DraggableGridItem
                               key={maskType.type}
@@ -1517,7 +1526,7 @@ function DraggableGridItem({ maskType, isGenerating, onClick }: any) {
       {...listeners}
       {...attributes}
       onClick={onClick}
-      className={`bg-surface text-text-primary rounded-lg p-2 flex flex-col items-center justify-center gap-2 aspect-square transition-colors
+      className={`bg-surface text-text-primary rounded-lg p-2 flex flex-col items-center justify-center gap-2 aspect-square max-sm:aspect-auto max-sm:h-16 max-sm:gap-1 max-sm:p-1.5 transition-colors
             ${
               maskType.disabled || isGenerating
                 ? 'opacity-50 cursor-not-allowed'
@@ -1532,12 +1541,12 @@ function DraggableGridItem({ maskType, isGenerating, onClick }: any) {
       whileTap={{ scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
     >
-      <maskType.icon size={24} />
+      <maskType.icon size={24} className="max-sm:w-5 max-sm:h-5" />
       <Text
         as="span"
         variant={TextVariants.small}
         color={TextColors.primary}
-        className="text-center w-full leading-tight"
+        className="text-center w-full leading-tight max-sm:text-[11px]"
       >
         {formatMaskTypeName(maskType.type)}
       </Text>

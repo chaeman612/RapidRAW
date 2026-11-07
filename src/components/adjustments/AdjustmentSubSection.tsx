@@ -39,7 +39,7 @@ export default function AdjustmentSubSection({ actions, children, id, order, tit
   };
 
   return (
-    <div className="p-1 bg-bg-tertiary rounded-md" style={{ order }}>
+    <div className="p-1 bg-bg-tertiary rounded-md max-sm:bg-transparent max-sm:px-0" style={{ order }}>
       <div className="group/visibility flex items-center gap-2 cursor-pointer select-none" onClick={handleToggle}>
         <Text variant={TextVariants.heading} className={clsx(!visibility && 'grow')}>
           {title}

@@ -660,12 +660,12 @@ const Slider = ({
 
   return (
     <div
-      className={`mb-2 group ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      className={`mb-2 max-sm:mb-1 group ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       ref={containerRef}
       data-speed-edit-id={speedEditId}
       onPointerDownCapture={disabled ? undefined : claimSpeedEdit}
     >
-      <div className="flex justify-between items-center mb-1">
+      <div className="flex justify-between items-center mb-1 max-sm:mb-0">
         <div
           className={`grid ${typeof label === 'string' && !disabled ? 'cursor-pointer' : ''}`}
           onClick={typeof label === 'string' && !disabled ? handleReset : undefined}

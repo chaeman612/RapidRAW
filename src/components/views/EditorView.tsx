@@ -8,6 +8,7 @@ import BottomBar from '../panel/BottomBar';
 import Resizer from '../ui/Resizer';
 import { MobilePanelSwitcher } from '../panel/PanelSwitcher';
 import { usePhoneLayout } from '../../hooks/usePhoneLayout';
+import { useSliderPeekStore } from '../../store/useSliderPeekStore';
 
 // Phone crop mode: a short options panel so the photo being cropped stays large.
 const PHONE_CROP_PANEL_HEIGHT = 212;
@@ -112,6 +113,9 @@ export default function EditorView({
     })),
   );
   const isPhoneCrop = isPhone && activePanel === Panel.Crop;
+  // Phones: while a slider is dragged the panel fades out and only its value shows.
+  const sliderPeek = useSliderPeekStore((state) => state.peek);
+  const isPeeking = isPhone && !!sliderPeek;
 
   const { multiSelectedPaths, imageRatings, flag, isViewLoading } = useLibraryStore(
     useShallow((state) => ({
@@ -227,7 +231,8 @@ export default function EditorView({
         )}
         style={{
           height: mobilePanelHeight,
-          opacity: isFullScreen ? 0 : 1,
+          opacity: isFullScreen || isPeeking ? 0 : 1,
+          transition: isPeeking ? 'opacity 120ms ease-out' : undefined,
         }}
       >
         {activePanel && !isFullScreen && !isPhoneCrop && (
@@ -274,6 +279,21 @@ export default function EditorView({
           {editorNode}
         </div>
         <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col">{editorMobilePanelNode}</div>
+        <AnimatePresence>
+          {isPeeking && sliderPeek && (
+            <motion.div
+              key="slider-peek"
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
+              className="pointer-events-none absolute left-1/2 top-16 z-20 -translate-x-1/2 flex items-baseline gap-2 rounded-full bg-black/60 px-4 py-2 text-white shadow-lg backdrop-blur-md"
+            >
+              {sliderPeek.label && <span className="text-sm text-white/75">{sliderPeek.label}</span>}
+              <span className="text-lg font-semibold tabular-nums">{sliderPeek.value}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }

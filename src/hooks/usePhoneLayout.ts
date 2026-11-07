@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 // Matches Tailwind's `max-sm` breakpoint used for the phone-specific styles.
-const PHONE_QUERY = '(max-width: 639.98px)';
+export const PHONE_QUERY = '(max-width: 639.98px)';
 
 /** True on phone-sized viewports, where the editor uses its single-section layout. */
 export function usePhoneLayout(): boolean {

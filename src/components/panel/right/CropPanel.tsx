@@ -52,6 +52,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { useUIStore } from '../../../store/useUIStore';
 import { useContextMenu } from '../../../context/ContextMenuContext';
 import { useSettingsStore } from '../../../store/useSettingsStore';
+import { usePhoneLayout } from '../../../hooks/usePhoneLayout';
+import { Panel } from '../../ui/AppProperties';
 
 const BASE_RATIO = 1.618;
 const RATIO_TOLERANCE = 0.01;
@@ -110,6 +112,19 @@ export default function CropPanel() {
   const activeOverlay = useEditorStore((s) => s.overlayMode);
   const setEditor = useEditorStore((s) => s.setEditor);
   const { setAdjustments, handleRotate, handleAutoStraighten } = useEditorActions();
+  const isPhone = usePhoneLayout();
+  const [phoneTab, setPhoneTab] = useState<'aspect' | 'rotate'>('aspect');
+  // Geometry when the crop tool was opened, restored by the phone layout's cancel button.
+  const cropEntrySnapshot = useRef({
+    aspectRatio: adjustments.aspectRatio,
+    crop: adjustments.crop,
+    flipHorizontal: adjustments.flipHorizontal,
+    flipVertical: adjustments.flipVertical,
+    orientationSteps: adjustments.orientationSteps,
+    rotation: adjustments.rotation,
+  });
+  // Geometry warps and lens profiles are not implemented in the web renderer yet.
+  const hideGeometrySections = !!import.meta.env.VITE_RAPIDRAW_WEB;
 
   const [customW, setCustomW] = useState('');
   const [customH, setCustomH] = useState('');
@@ -750,6 +765,164 @@ export default function CropPanel() {
     ]);
   };
 
+  if (isPhone) {
+    const leaveCrop = () => useUIStore.getState().setPanel(Panel.Adjustments);
+    const cancelCrop = () => {
+      const snapshot = cropEntrySnapshot.current;
+      updateLocalRotation(null);
+      setAdjustments((prev: Adjustments) => ({ ...prev, ...snapshot }));
+      leaveCrop();
+    };
+    const iconButton = (
+      icon: React.ReactNode,
+      label: string,
+      onClick: () => void,
+      active = false,
+      disabled = false,
+    ) => (
+      <button
+        className={clsx(
+          'flex flex-col items-center justify-center gap-1 min-w-0 px-1 py-1.5 rounded-lg transition-colors disabled:opacity-40',
+          active ? 'bg-accent text-button-text' : 'text-text-secondary active:bg-surface',
+        )}
+        disabled={disabled}
+        onClick={onClick}
+      >
+        {icon}
+        <span className="text-[10px] leading-tight text-center line-clamp-2">{label}</span>
+      </button>
+    );
+
+    return (
+      <div className="flex flex-col h-full">
+        <div className="grow min-h-0 flex flex-col justify-center px-3">
+          {phoneTab === 'aspect' ? (
+            <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar py-2">
+              <button
+                className="shrink-0 p-2 rounded-md bg-surface text-text-secondary disabled:opacity-40"
+                disabled={isOrientationToggleDisabled}
+                onClick={handleOrientationToggle}
+                data-tooltip={getOrientationTooltip()}
+              >
+                {orientation === Orientation.Vertical ? (
+                  <RectangleVertical size={18} />
+                ) : (
+                  <RectangleHorizontal size={18} />
+                )}
+              </button>
+              <button
+                className="shrink-0 p-2 rounded-md bg-surface text-text-secondary"
+                onClick={handleOverlayCycle}
+                data-tooltip={getOverlayTooltip()}
+              >
+                <Grid3x3 size={18} />
+              </button>
+              <div className="w-px h-6 bg-surface shrink-0" />
+              {ALL_PRESETS.map((preset: CropPreset, index: number) => (
+                <button
+                  key={index < PRESETS.length ? preset.name : `saved-${index}`}
+                  className={clsx(
+                    'shrink-0 px-3 py-2 rounded-md text-sm whitespace-nowrap transition-colors',
+                    isPresetActive(preset) ? 'bg-accent text-button-text' : 'bg-surface text-text-secondary',
+                  )}
+                  onClick={() => handlePresetClick(preset)}
+                >
+                  {preset.name}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 py-1">
+              <Slider
+                label={t('editor.crop.rotationHeading')}
+                min={-45}
+                max={45}
+                step={0.1}
+                value={displayRotation}
+                defaultValue={0}
+                suffix="°"
+                onChange={handleFineRotationChange}
+                onDragStateChange={handleDragStateChange}
+                speedEditId="rotation"
+              />
+              <div className="grid grid-cols-5 gap-1">
+                {iconButton(<RotateCcw size={18} />, t('editor.crop.labels.rotateLeft'), () => handleRotate(-90))}
+                {iconButton(<RotateCw size={18} />, t('editor.crop.labels.rotateRight'), () => handleRotate(90))}
+                {iconButton(
+                  <FlipHorizontal size={18} />,
+                  t('editor.crop.labels.flipHoriz'),
+                  () => setAdjustments((prev: Adjustments) => ({ ...prev, flipHorizontal: !prev.flipHorizontal })),
+                  !!flipHorizontal,
+                )}
+                {iconButton(
+                  <FlipVertical size={18} />,
+                  t('editor.crop.labels.flipVert'),
+                  () => setAdjustments((prev: Adjustments) => ({ ...prev, flipVertical: !prev.flipVertical })),
+                  !!flipVertical,
+                )}
+                {iconButton(
+                  isAutoStraightening ? <Loader size={18} className="animate-spin" /> : <ScanLine size={18} />,
+                  // Tooltip text carries a keyboard hint, e.g. "(Shift+S)".
+                  t('editor.crop.tooltips.autoStraighten').replace(/\s*\(.*\)\s*$/, ''),
+                  handleAutoStraighten,
+                  false,
+                  isAutoStraightening,
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="shrink-0 flex justify-center gap-6 pb-1">
+          {(
+            [
+              ['aspect', t('editor.crop.aspectRatioHeading')],
+              ['rotate', t('editor.crop.rotationHeading')],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              className={clsx(
+                'px-1 pb-1.5 text-sm border-b-2 transition-colors',
+                phoneTab === id ? 'text-text-primary border-text-primary' : 'text-text-secondary border-transparent',
+              )}
+              onClick={() => setPhoneTab(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="shrink-0 flex items-center justify-between px-2 h-12 border-t border-surface">
+          <button
+            className="p-2.5 rounded-full text-text-primary active:bg-surface"
+            onClick={cancelCrop}
+            aria-label={t('modals.transform.cancel')}
+          >
+            <X size={22} />
+          </button>
+          <div className="flex items-center gap-2">
+            <Text variant={TextVariants.label}>{t('editor.crop.title')}</Text>
+            <button
+              className="p-1.5 rounded-full text-text-secondary active:bg-surface"
+              onClick={handleReset}
+              data-tooltip={t('editor.crop.resetTooltip')}
+            >
+              <RotateCcw size={16} />
+            </button>
+          </div>
+          <button
+            className="p-2.5 rounded-full text-text-primary active:bg-surface"
+            onClick={leaveCrop}
+            aria-label={t('modals.transform.apply')}
+          >
+            <Check size={22} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div className="p-3 flex justify-between items-center shrink-0 border-b border-surface">
@@ -1016,7 +1189,7 @@ export default function CropPanel() {
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className={clsx('space-y-4', hideGeometrySections && 'hidden')}>
               <Text variant={TextVariants.heading} className="mb-2">
                 {t('modals.transform.title')}
               </Text>
@@ -1294,7 +1467,7 @@ export default function CropPanel() {
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className={clsx('space-y-4', hideGeometrySections && 'hidden')}>
               <Text variant={TextVariants.heading} className="mb-2">
                 {t('modals.lensCorrection.title')}
               </Text>

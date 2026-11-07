@@ -11,16 +11,19 @@ import {
   SquareSplitHorizontal,
   SquareSplitVertical,
   Undo,
+  FileInput,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
-import { CompareMode, SelectedImage, GroupingMode } from '../../ui/AppProperties';
+import { CompareMode, SelectedImage, GroupingMode, Panel } from '../../ui/AppProperties';
 import { ToolbarMenu, ToolbarMenuItem, useMenuDismiss } from './ToolbarMenu';
 import { IconAperture, IconCalendar, IconClock, IconFocalLength, IconIso, IconShutter } from './ExifIcons';
 import Text from '../../ui/Text';
 import { TextColors, TextVariants, TextWeights } from '../../../types/typography';
 import { useLibraryStore } from '../../../store/useLibraryStore';
 import { useSettingsStore } from '../../../store/useSettingsStore';
+import { useUIStore } from '../../../store/useUIStore';
+import { usePhoneLayout } from '../../../hooks/usePhoneLayout';
 import { findGroupVariants, getVariantLabel } from '../../../utils/imageGrouping';
 
 const COMPARE_MODES = [
@@ -137,6 +140,7 @@ const EditorToolbar = memo(
     const [disableLoaderTransition, setDisableLoaderTransition] = useState(false);
     const hideTimeoutRef = useRef<number | null>(null);
     const prevIsLoadingRef = useRef(isLoading);
+    const isPhone = usePhoneLayout();
     const [isVcHovered, setIsVcHovered] = useState(false);
     const [isInfoHovered, setIsInfoHovered] = useState(false);
     const [isHistoryVisible, setIsHistoryVisible] = useState(false);
@@ -291,7 +295,12 @@ const EditorToolbar = memo(
           </div>
         </div>
 
-        <div className="flex-1 flex justify-center min-w-0 relative h-full">
+        {isPhone && (
+          <div className="flex-1 flex justify-center items-center min-w-0">
+            {isLoaderMounted && <Loader2 size={16} className="text-text-secondary animate-spin" />}
+          </div>
+        )}
+        <div className={clsx('flex-1 flex justify-center min-w-0 relative h-full', isPhone && 'hidden')}>
           <div
             className={clsx(
               'bg-surface flex flex-col items-center overflow-hidden transition-all duration-200 ease-out pt-2',
@@ -543,16 +552,27 @@ const EditorToolbar = memo(
             onSelectMode={onSelectCompareMode}
             onToggle={onToggleCompare}
           />
-          <button
-            className="bg-surface text-text-primary p-2 rounded-full hover:bg-card-active transition-colors disabled:opacity-50 disabled:cursor-not-allowed relative"
-            onClick={onToggleFullScreen}
-            onKeyDown={handleButtonKeyDown}
-            data-tooltip={t('editor.toolbar.tooltips.fullscreen')}
-          >
-            <div className="relative w-5 h-5 flex items-center justify-center">
-              <Maximize size={20} />
-            </div>
-          </button>
+          {isPhone ? (
+            <button
+              className="bg-surface text-text-primary p-2 rounded-full hover:bg-card-active transition-colors"
+              onClick={() => useUIStore.getState().setPanel(Panel.Export)}
+              onKeyDown={handleButtonKeyDown}
+              aria-label={t('editor.switcher.tooltips.export')}
+            >
+              <FileInput size={20} />
+            </button>
+          ) : (
+            <button
+              className="bg-surface text-text-primary p-2 rounded-full hover:bg-card-active transition-colors disabled:opacity-50 disabled:cursor-not-allowed relative"
+              onClick={onToggleFullScreen}
+              onKeyDown={handleButtonKeyDown}
+              data-tooltip={t('editor.toolbar.tooltips.fullscreen')}
+            >
+              <div className="relative w-5 h-5 flex items-center justify-center">
+                <Maximize size={20} />
+              </div>
+            </button>
+          )}
         </div>
       </div>
     );

@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client", "@webgpu/types"],
+    "rootDir": "..",
+    "lib": ["dom", "dom.iterable", "esnext", "webworker"]
+  },
+  "include": ["src", "../src/vite-env.d.ts"]
+}

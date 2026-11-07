@@ -85,8 +85,8 @@ const ToneMapperSwitch = ({
   }, [selectedMapper, toneMapperOptions]);
 
   return (
-    <div className="group mb-3">
-      <div className="flex justify-between items-center mb-2">
+    <div className="group mb-3 max-sm:mb-1 max-sm:grid max-sm:grid-cols-[auto_1fr] max-sm:items-center max-sm:gap-x-3">
+      <div className="flex justify-between items-center mb-2 max-sm:mb-0">
         <div
           className="grid cursor-pointer"
           onClick={handleReset}
@@ -112,8 +112,8 @@ const ToneMapperSwitch = ({
           </span>
         </div>
       </div>
-      <div className="w-full p-2 pb-1 bg-card-active rounded-md">
-        <div className="relative flex w-full">
+      <div className="w-full p-2 pb-1 bg-card-active rounded-md max-sm:contents">
+        <div className="relative flex w-full max-sm:max-w-44 max-sm:justify-self-end max-sm:bg-card-active max-sm:rounded-md">
           <motion.div
             className="absolute top-0 bottom-0 z-0 bg-accent"
             style={{ borderRadius: 6 }}
@@ -126,7 +126,7 @@ const ToneMapperSwitch = ({
               data-tooltip={mapper.title}
               onClick={() => onMapperChange(mapper.id)}
               className={clsx(
-                'relative flex-1 flex items-center justify-center gap-2 px-3 p-1.5 text-sm font-medium rounded-md transition-colors',
+                'relative flex-1 flex items-center justify-center gap-2 px-3 p-1.5 max-sm:py-1 text-sm max-sm:text-xs font-medium rounded-md transition-colors',
                 {
                   'text-text-primary hover:bg-surface': selectedMapper !== mapper.id,
                   'text-button-text': selectedMapper === mapper.id,
@@ -138,7 +138,7 @@ const ToneMapperSwitch = ({
             </button>
           ))}
         </div>
-        <div className="mt-2.5 px-1">
+        <div className="mt-2.5 px-1 max-sm:col-span-2 max-sm:mt-2 max-sm:px-0">
           <Slider
             label={t('adjustments.basic.exposure')}
             max={5}

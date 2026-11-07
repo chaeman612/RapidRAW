@@ -3,6 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { GLOBAL_KEYS } from './AppProperties';
 import { useEditorStore } from '../../store/useEditorStore';
 import { SPEED_EDIT_ADJUSTMENTS } from '../../utils/adjustments';
+import { useSliderPeekStore } from '../../store/useSliderPeekStore';
+import { PHONE_QUERY } from '../../hooks/usePhoneLayout';
+
+let nextPeekOwner = 1;
 
 export type SliderChangeEvent =
   | React.ChangeEvent<HTMLInputElement>
@@ -207,6 +211,27 @@ const Slider = ({
     hasReportedDragStateRef.current = true;
     onDragStateChangeRef.current(isDragging);
   }, [isDragging]);
+
+  // Phones: while dragging, the editor hides its panel and shows only this
+  // slider's label and value over the photo.
+  const peekOwnerRef = useRef(0);
+  if (!peekOwnerRef.current) peekOwnerRef.current = nextPeekOwner++;
+  useEffect(() => {
+    const owner = peekOwnerRef.current;
+    if (!isDragging || !window.matchMedia?.(PHONE_QUERY).matches) {
+      useSliderPeekStore.getState().clearPeek(owner);
+      return;
+    }
+    useSliderPeekStore.getState().setPeek({
+      owner,
+      label: typeof label === 'string' ? label : '',
+      value: `${formatValue(displayValue)}${suffix}`,
+    });
+  }, [isDragging, displayValue, label, suffix]);
+  useEffect(() => {
+    const owner = peekOwnerRef.current;
+    return () => useSliderPeekStore.getState().clearPeek(owner);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -660,12 +685,12 @@ const Slider = ({
 
   return (
     <div
-      className={`mb-2 group ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      className={`mb-2 max-sm:mb-1 group ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       ref={containerRef}
       data-speed-edit-id={speedEditId}
       onPointerDownCapture={disabled ? undefined : claimSpeedEdit}
     >
-      <div className="flex justify-between items-center mb-1">
+      <div className="flex justify-between items-center mb-1 max-sm:mb-0">
         <div
           className={`grid ${typeof label === 'string' && !disabled ? 'cursor-pointer' : ''}`}
           onClick={typeof label === 'string' && !disabled ? handleReset : undefined}

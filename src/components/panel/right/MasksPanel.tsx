@@ -1072,7 +1072,10 @@ export default function MasksPanel() {
                         <Text variant={TextVariants.heading} className="mb-2">
                           {t('editor.masks.aiTitle', 'AI Selections')}
                         </Text>
-                        <div className="grid grid-cols-3 gap-2 mb-6" onClick={(e) => e.stopPropagation()}>
+                        <div
+                          className="grid grid-cols-3 max-sm:grid-cols-4 gap-2 max-sm:gap-1.5 mb-6"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {MASK_AI_TYPES.map((maskType) => (
                             <DraggableGridItem
                               key={maskType.type}
@@ -1088,8 +1091,14 @@ export default function MasksPanel() {
                     <Text variant={TextVariants.heading} className="mb-2">
                       {t('editor.masks.basicTitle', 'Basic Tools')}
                     </Text>
-                    <div className="grid grid-cols-3 gap-2 mb-6" onClick={(e) => e.stopPropagation()}>
-                      {MASK_BASIC_TYPES.map((maskType) => (
+                    <div
+                      className="grid grid-cols-3 max-sm:grid-cols-4 gap-2 max-sm:gap-1.5 mb-6"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {MASK_BASIC_TYPES.filter(
+                        // Match Brush relies on desktop-only image analysis; hidden in the web build.
+                        (maskType) => !(import.meta.env.VITE_RAPIDRAW_WEB && maskType.type === Mask.MatchBrush),
+                      ).map((maskType) => (
                         <DraggableGridItem
                           key={maskType.type}
                           maskType={maskType}
@@ -1102,7 +1111,10 @@ export default function MasksPanel() {
                     <Text variant={TextVariants.heading} className="mb-2">
                       {t('editor.masks.rangeTitle', 'Ranges & Global')}
                     </Text>
-                    <div className="grid grid-cols-3 gap-2" onClick={(e) => e.stopPropagation()}>
+                    <div
+                      className="grid grid-cols-3 max-sm:grid-cols-4 gap-2 max-sm:gap-1.5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {MASK_RANGE_TYPES.map((maskType) => (
                         <DraggableGridItem
                           key={maskType.type}
@@ -1340,19 +1352,19 @@ function DraggableGridItem({ maskType, onClick, onRightClick, activeMaskContaine
         if (event.button !== 2) return;
         onRightClick(event);
       }}
-      className={`bg-surface text-text-primary rounded-lg p-2 flex flex-col items-center justify-center gap-2 aspect-square transition-colors
+      className={`bg-surface text-text-primary rounded-lg p-2 flex flex-col items-center justify-center gap-2 aspect-square max-sm:aspect-auto max-sm:h-16 max-sm:gap-1 max-sm:p-1.5 transition-colors
         ${maskType.disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-card-active active:bg-accent/20'}
         ${isDragging ? 'opacity-50' : ''}`}
       data-tooltip={tooltip}
       whileTap={{ scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
     >
-      <maskType.icon size={24} />
+      <maskType.icon size={24} className="max-sm:w-5 max-sm:h-5" />
       <Text
         as="span"
         variant={TextVariants.small}
         color={TextColors.primary}
-        className="text-center w-full leading-tight"
+        className="text-center w-full leading-tight max-sm:text-[11px]"
       >
         {getMaskTypeName(maskType)}
       </Text>

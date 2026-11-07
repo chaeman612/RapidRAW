@@ -5,7 +5,6 @@
 import { editorCore, type DecodedImage } from '../core/client';
 import { Renderer, frameCropRect, type Frame, type PackedAdjustments, type SourceImage } from '../gpu/renderer';
 import * as vfs from './vfs';
-import { isMobileUi } from '../platform';
 import { loadSidecar } from './sidecars';
 import { currentSettings, settingsJson } from './settings';
 import * as db from './db';
@@ -129,7 +128,7 @@ async function sourceFor(t: RenderTarget, width: number, height: number) {
     if (!t.isCurrent()) throw new Error('Superseded or worker failed');
     src = renderer.createSource(halves, width, height);
     // keep at most two scales (preview + one other)
-    if (t.sources.size >= (isMobileUi ? 1 : 2)) {
+    if (t.sources.size >= 2) {
       const [oldKey, old] = t.sources.entries().next().value as [string, SourceImage];
       t.sources.delete(oldKey);
       renderer.releaseSource(old);

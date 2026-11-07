@@ -9,6 +9,9 @@ import Resizer from '../ui/Resizer';
 import { MobilePanelSwitcher } from '../panel/PanelSwitcher';
 import { usePhoneLayout } from '../../hooks/usePhoneLayout';
 
+// Phone crop mode: a short options panel so the photo being cropped stays large.
+const PHONE_CROP_PANEL_HEIGHT = 212;
+
 import { useEditorStore } from '../../store/useEditorStore';
 import { useUIStore } from '../../store/useUIStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
@@ -85,6 +88,7 @@ export default function EditorView({
       setUI: state.setUI,
     })),
   );
+  const isPhoneCrop = isPhone && activePanel === Panel.Crop;
 
   const { multiSelectedPaths, imageRatings, flag, isViewLoading } = useLibraryStore(
     useShallow((state) => ({
@@ -176,11 +180,17 @@ export default function EditorView({
           !isResizing && !isInstantTransition && 'transition-all duration-300 ease-in-out',
         )}
         style={{
-          height: isFullScreen ? 0 : activePanel ? compactEditorPanelHeight : compactEditorPanelCollapsedHeight,
+          height: isFullScreen
+            ? 0
+            : isPhoneCrop
+              ? PHONE_CROP_PANEL_HEIGHT
+              : activePanel
+                ? compactEditorPanelHeight
+                : compactEditorPanelCollapsedHeight,
           opacity: isFullScreen ? 0 : 1,
         }}
       >
-        {activePanel && !isFullScreen && (
+        {activePanel && !isFullScreen && !isPhoneCrop && (
           <Resizer
             direction={Orientation.Horizontal}
             onMouseDown={createResizeHandler('compact', compactEditorPanelHeight)}
@@ -203,7 +213,8 @@ export default function EditorView({
             )}
           </AnimatePresence>
         </div>
-        <MobilePanelSwitcher activePanel={activePanel} onPanelSelect={handlePanelSelect} />
+        {/* Phone crop mode brings its own cancel/apply bar instead of the toolbar. */}
+        {!isPhoneCrop && <MobilePanelSwitcher activePanel={activePanel} onPanelSelect={handlePanelSelect} />}
         {/* Phones: copy/paste live in the Adjust panel's category strip and rating in
             the library, keeping the editor's bottom area to a single toolbar. */}
         {!isPhone && <div className="shrink-0 border-t border-surface">{editorBottomBarComponent}</div>}

@@ -69,6 +69,9 @@ export interface SourceImage {
   readonly width: number;
   readonly height: number;
   texture: GPUTexture;
+  /** Renders currently using this source; release waits for them to finish. */
+  users?: number;
+  released?: boolean;
 }
 
 export interface RenderResult {
@@ -88,6 +91,7 @@ interface PreparedInput {
   haze: GPUTextureView;
   airlight: GPUTextureView;
   owned: GPUTexture[];
+  users: number;
 }
 
 let nextSourceId = 1;
@@ -300,7 +304,13 @@ export class Renderer {
     return { id: nextSourceId++, width, height, texture };
   }
 
+  /**
+   * Frees a source and its cached inputs. Several preview lanes render
+   * concurrently, so destruction is deferred until no render uses them.
+   */
   releaseSource(source: SourceImage) {
+    source.released = true;
+    if (source.users) return;
     this.prepared = this.prepared.filter((p) => {
       if (p.key.startsWith(`${source.id}|`)) {
         p.owned.forEach((t) => t.destroy());
@@ -309,6 +319,14 @@ export class Renderer {
       return true;
     });
     source.texture.destroy();
+  }
+
+  private trimPrepared() {
+    while (this.prepared.length > MAX_PREPARED) {
+      const idle = this.prepared.findIndex((p) => p.users === 0);
+      if (idle < 0) break;
+      this.prepared.splice(idle, 1)[0].owned.forEach((t) => t.destroy());
+    }
   }
 
   setLut(key: string | null, size = 0, rgb?: Float32Array) {
@@ -344,12 +362,14 @@ export class Renderer {
 
   // ---- preparation: reframe + guided filter coefficients -----------------------
 
+  /** Returns the reframed + guided-filter input for `source`, marked as in use. */
   private prepare(source: SourceImage, frame: Frame, isRaw: number): PreparedInput {
     const key = `${source.id}|${JSON.stringify(frame)}|${isRaw}`;
     const hit = this.prepared.findIndex((p) => p.key === key);
     if (hit >= 0) {
       const [p] = this.prepared.splice(hit, 1);
       this.prepared.push(p);
+      p.users++;
       return p;
     }
 
@@ -365,11 +385,10 @@ export class Renderer {
     }
     const view = texture.createView();
     const guided = this.buildGuidedCoeffs(view, width, height, isRaw, owned);
-    const entry: PreparedInput = { key, width, height, texture, view, ...guided, owned };
+    // Marked as in use before trimming so the cache never evicts the entry it just built.
+    const entry: PreparedInput = { key, width, height, texture, view, ...guided, owned, users: 1 };
     this.prepared.push(entry);
-    while (this.prepared.length > MAX_PREPARED) {
-      this.prepared.shift()!.owned.forEach((t) => t.destroy());
-    }
+    this.trimPrepared();
     return entry;
   }
 
@@ -574,8 +593,25 @@ export class Renderer {
     adjustments: PackedAdjustments,
     masks: Uint8Array | null,
   ): Promise<RenderResult> {
+    if (source.released) throw new Error('Superseded or worker failed');
+    source.users = (source.users ?? 0) + 1;
+    const input = this.prepare(source, frame, adjustments.isRaw); // acquires `input`
+    try {
+      return await this.renderPrepared(input, adjustments, masks);
+    } finally {
+      input.users--;
+      source.users--;
+      if (source.released) this.releaseSource(source);
+      this.trimPrepared();
+    }
+  }
+
+  private async renderPrepared(
+    input: PreparedInput,
+    adjustments: PackedAdjustments,
+    masks: Uint8Array | null,
+  ): Promise<RenderResult> {
     const d = this.device;
-    const input = this.prepare(source, frame, adjustments.isRaw);
     const { width, height } = input;
     if (width > this.maxTextureDimension || height > this.maxTextureDimension) {
       throw new Error(

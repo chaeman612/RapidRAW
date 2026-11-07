@@ -18,6 +18,7 @@ import {
 import { Panel, PanelRegion } from '../ui/AppProperties';
 import { SwitcherPlacement, useUIStore } from '../../store/useUIStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
+import { usePhoneLayout } from '../../hooks/usePhoneLayout';
 
 export const PANEL_ICONS: Record<Panel, LucideIcon> = {
   [Panel.Metadata]: Info,
@@ -251,6 +252,8 @@ export function MobilePanelSwitcher({
   placement?: 'bottom' | 'right';
 }) {
   const isAiFree = useSettingsStore((s) => s.appSettings?.aiProvider === 'ai-free');
+  // Phones reach Export from the editor's top bar.
+  const isPhone = usePhoneLayout();
   const MOBILE_PANELS = [
     Panel.Metadata,
     Panel.Adjustments,
@@ -259,7 +262,7 @@ export function MobilePanelSwitcher({
     Panel.Ai,
     Panel.Presets,
     Panel.Export,
-  ].filter((id) => !(isAiFree && id === Panel.Ai));
+  ].filter((id) => !(isAiFree && id === Panel.Ai) && !(isPhone && id === Panel.Export));
 
   const isVertical = placement === 'right';
 
